@@ -20,7 +20,11 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parent.parent
 ICONS = ROOT / "icons"
 ICONS.mkdir(exist_ok=True)
-SOURCE = ICONS / "source-logo.png"
+
+# Accepts a few likely filenames so "drop the logo in icons/" doesn't require an
+# exact name/extension match — checked in this order, first one found wins.
+_SOURCE_CANDIDATES = ["source-logo.png", "source-logo.jpg", "applogo.png", "applogo.jpg"]
+SOURCE = next((ICONS / name for name in _SOURCE_CANDIDATES if (ICONS / name).exists()), None)
 
 BG = (0, 0, 0, 255)              # the source logo's own background is already black
 ACCENT = (192, 38, 211, 255)     # #c026d3 — placeholder only; real logo is already colored
@@ -46,6 +50,20 @@ def make_placeholder(size: int) -> Image.Image:
     return img
 
 
+def pad_to_square(img: Image.Image) -> Image.Image:
+    """Pads a non-square source (e.g. a tall portrait wallpaper crop) onto a square
+    canvas using the LONGER side, centered — never crops, never distorts aspect
+    ratio. The padding is invisible here since it's the same black as the source's
+    own background."""
+    w, h = img.size
+    if w == h:
+        return img
+    side = max(w, h)
+    canvas = Image.new("RGBA", (side, side), BG)
+    canvas.paste(img, ((side - w) // 2, (side - h) // 2), img)
+    return canvas
+
+
 def make_maskable(base: Image.Image, size: int) -> Image.Image:
     """Pad `base` (already `size`x`size`) into a safe-zone-centered version on a
     solid background, so Android's circular mask doesn't clip the content."""
@@ -58,11 +76,12 @@ def make_maskable(base: Image.Image, size: int) -> Image.Image:
 
 
 def main():
-    if SOURCE.exists():
+    if SOURCE is not None:
         print(f"using real logo: {SOURCE}")
         src = Image.open(SOURCE).convert("RGBA")
+        src = pad_to_square(src)
     else:
-        print("no icons/source-logo.png yet — generating a placeholder (swap in the real file and re-run)")
+        print("no logo file found in icons/ yet — generating a placeholder (add one and re-run)")
         src = None
 
     for size in SIZES:
