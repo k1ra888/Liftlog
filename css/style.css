@@ -306,6 +306,10 @@ button {
   margin-bottom: 10px;
 }
 
+.sets-picker .stepper-controls {
+  max-width: 180px;
+}
+
 .card-heading {
   font-size: 0.72rem;
   text-transform: uppercase;

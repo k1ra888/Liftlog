@@ -8,7 +8,9 @@
 (function () {
   "use strict";
 
-  const NUM_SETS = 3;
+  const DEFAULT_NUM_SETS = 3;
+  const MIN_SETS = 1;
+  const MAX_SETS = 6;
 
   // name -> Exercise, for resolving `substitutes` (stored as display names in the
   // Python data, ported as-is) to real exercise objects for the swap picker.
@@ -203,7 +205,7 @@
   async function openExerciseIntro(slotIndex) {
     const ex = state.daySlots[slotIndex];
     const priorState = await Storage.getState(ex.id);
-    session = { slotIndex, ex, priorState, plan: null, sets: [], setIndex: 0 };
+    session = { slotIndex, ex, priorState, plan: null, sets: [], setIndex: 0, numSets: DEFAULT_NUM_SETS };
 
     overlayTitle.textContent = ex.name;
     overlay.classList.remove("hidden");
@@ -250,9 +252,62 @@
     return ex.failure_risk === Engine.FailureRisk.NEEDS_SAFETIES && !state.gymProfile.has_rack_safeties;
   }
 
+  // Sets-per-session picker. Not every day is a 3-set day — the engine already
+  // handles any count via rir_ramp()/prescribe(), this just exposes it. Changing
+  // it re-renders the intro so the target plan below reflects the new count.
+  function setsPickerRow() {
+    const row = document.createElement("div");
+    row.className = "card sets-picker";
+    const heading = document.createElement("div");
+    heading.className = "card-heading";
+    heading.textContent = "Sets today";
+    row.appendChild(heading);
+
+    const controls = document.createElement("div");
+    controls.className = "stepper-controls";
+    const minus = document.createElement("button");
+    minus.type = "button";
+    minus.textContent = "−";
+    const val = document.createElement("div");
+    val.className = "stepper-value";
+    val.textContent = session.numSets;
+    const plus = document.createElement("button");
+    plus.type = "button";
+    plus.textContent = "+";
+
+    minus.addEventListener("click", () => {
+      if (session.numSets > MIN_SETS) {
+        session.numSets -= 1;
+        renderIntro();
+      }
+    });
+    plus.addEventListener("click", () => {
+      if (session.numSets < MAX_SETS) {
+        session.numSets += 1;
+        renderIntro();
+      }
+    });
+
+    controls.appendChild(minus);
+    controls.appendChild(val);
+    controls.appendChild(plus);
+    row.appendChild(controls);
+    return row;
+  }
+
+  // Guards against a real race: renderIntro() awaits Storage before it can
+  // finish, and the sets-picker's +/- buttons call it again on every tap. Two
+  // quick taps previously produced two overlapping renders, both appending into
+  // the live DOM — the second call's early "clear" didn't stop the first call's
+  // late "append" from landing after it, duplicating every card. Building into a
+  // detached fragment and only swapping it in if this is still the newest call
+  // (via the token) makes a superseded render a no-op instead of a duplicate.
+  let introRenderToken = 0;
+
   async function renderIntro() {
+    const myToken = ++introRenderToken;
     const { ex, priorState } = session;
-    overlayBody.innerHTML = "";
+    const frag = document.createDocumentFragment();
 
     if (priorState) {
       // What you actually did last time — separate from the fresh target below,
@@ -274,11 +329,15 @@
           row.textContent = `Set ${s.set_index}: ${s.weight} lb × ${s.reps} · RIR ${rirText}`;
           lastCard.appendChild(row);
         });
-        overlayBody.appendChild(lastCard);
+        frag.appendChild(lastCard);
       }
 
+      if (myToken !== introRenderToken) return; // superseded while awaiting above
+
+      frag.appendChild(setsPickerRow());
+
       session.plan = Engine.prescribe(
-        ex, priorState, NUM_SETS, Engine.gymProfile(state.gymProfile),
+        ex, priorState, session.numSets, Engine.gymProfile(state.gymProfile),
         session.spotterPresent === true, todayIso()
       );
       const planCard = document.createElement("div");
@@ -294,12 +353,13 @@
           (p.capped ? ' <span class="badge-cap">capped</span>' : "");
         planCard.appendChild(row);
       });
-      overlayBody.appendChild(planCard);
+      frag.appendChild(planCard);
     } else {
       const note = document.createElement("div");
       note.className = "card";
       note.textContent = "First time logging this — no targets yet. Log what you do; next session's plan starts from this.";
-      overlayBody.appendChild(note);
+      frag.appendChild(note);
+      frag.appendChild(setsPickerRow());
       session.plan = null;
     }
 
@@ -316,7 +376,7 @@
         renderIntro();
       });
       row.appendChild(cb);
-      overlayBody.appendChild(row);
+      frag.appendChild(row);
     }
 
     const start = document.createElement("button");
@@ -327,14 +387,18 @@
       session.sets = [];
       renderSetEntry();
     });
-    overlayBody.appendChild(start);
+    frag.appendChild(start);
+
+    if (myToken !== introRenderToken) return; // superseded while awaiting above
+    overlayBody.innerHTML = "";
+    overlayBody.appendChild(frag);
   }
 
   // ---------------------------------------------------------------- per-set logging
 
   function renderSetEntry() {
     overlaySwap.classList.add("hidden");
-    const { ex, plan, setIndex } = session;
+    const { ex, plan, setIndex, numSets } = session;
     const target = plan ? plan[setIndex] : null;
 
     const startWeight = target ? target.target_weight : (session.sets.length ? session.sets[session.sets.length - 1].weight : 0);
@@ -349,7 +413,7 @@
 
     const title = document.createElement("div");
     title.className = "set-title";
-    title.innerHTML = `Set ${setIndex + 1} of ${NUM_SETS}` +
+    title.innerHTML = `Set ${setIndex + 1} of ${numSets}` +
       (target && target.capped ? ' <span class="badge-cap">capped</span>' : "");
     card.appendChild(title);
 
@@ -371,7 +435,7 @@
 
     const logBtn = document.createElement("button");
     logBtn.className = "btn btn-primary btn-block";
-    logBtn.textContent = setIndex === NUM_SETS - 1 ? "Log final set" : "Log set";
+    logBtn.textContent = setIndex === numSets - 1 ? "Log final set" : "Log set";
     logBtn.addEventListener("click", () => {
       session.sets.push(Engine.setLog({
         set_index: setIndex + 1,
@@ -384,7 +448,7 @@
         stopped_at_cap: target ? target.capped : false,
       }));
       const justLogged = session.sets[session.sets.length - 1];
-      if (setIndex + 1 < NUM_SETS) {
+      if (setIndex + 1 < numSets) {
         session.setIndex += 1;
         renderRestTimer(ex.default_rest_seconds, justLogged);
       } else {
