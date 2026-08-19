@@ -341,6 +341,13 @@ button {
   text-align: center;
 }
 
+.stepper .stepper-hint {
+  font-size: 0.72rem;
+  color: var(--accent);
+  margin-bottom: 4px;
+  text-align: center;
+}
+
 .stepper-controls {
   display: flex;
   align-items: center;

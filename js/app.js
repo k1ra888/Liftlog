@@ -428,9 +428,9 @@
 
     const group = document.createElement("div");
     group.className = "stepper-group";
-    group.appendChild(makeStepper("Weight", values, "weight", weightStep, 0, null));
-    group.appendChild(makeStepper("Reps", values, "reps", 1, 0, null));
-    group.appendChild(makeStepper("RIR", values, "rir", 1, 0, 5));
+    group.appendChild(makeStepper("Weight", values, "weight", weightStep, 0, null, target ? `target ${target.target_weight}` : null));
+    group.appendChild(makeStepper("Reps", values, "reps", 1, 0, null, target ? `target ${target.target_reps}` : null));
+    group.appendChild(makeStepper("RIR", values, "rir", 1, 0, 5, target ? `target ${target.target_rir}` : null));
     card.appendChild(group);
 
     const logBtn = document.createElement("button");
@@ -460,13 +460,20 @@
     overlayBody.appendChild(card);
   }
 
-  function makeStepper(label, values, key, step, min, max) {
+  function makeStepper(label, values, key, step, min, max, hint) {
     const wrap = document.createElement("div");
     wrap.className = "stepper";
     const lbl = document.createElement("div");
     lbl.className = "stepper-label";
     lbl.textContent = label;
     wrap.appendChild(lbl);
+
+    if (hint) {
+      const hintEl = document.createElement("div");
+      hintEl.className = "stepper-hint";
+      hintEl.textContent = hint;
+      wrap.appendChild(hintEl);
+    }
 
     const controls = document.createElement("div");
     controls.className = "stepper-controls";
