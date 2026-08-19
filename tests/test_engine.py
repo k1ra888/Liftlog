@@ -399,7 +399,7 @@ def test_custom_exercise_needs_only_name_muscles_and_equipment():
     """The add-your-own flow must not be an eight-field form."""
     from engine import make_exercise
     ex = make_exercise("pec_deck", "Pec Deck", "machine", primary=["chest"])
-    assert ex.load_increment == 10.0
+    assert ex.load_increment == 5.0
     assert ex.rep_range == (10, 15)
     assert ex.failure_risk.value == "safe_to_failure"
 
@@ -411,10 +411,12 @@ def test_every_derived_field_can_be_overridden():
     assert (ex.load_increment, ex.rep_range, ex.default_rest_seconds) == (5.0, (6, 8), 200)
 
 
-def test_five_pound_plates_mean_ten_pound_barbell_jumps():
+def test_two_point_five_pound_plates_mean_five_pound_jumps_everywhere():
+    """With 2.5 lb plates available, every preset standardizes on a 5 lb jump —
+    not just dumbbells and cables, which were already 5 lb."""
     from engine import PRESETS
-    assert PRESETS["smith"]["increment"] == 10.0
-    assert PRESETS["dumbbell"]["increment"] == 5.0
+    for name, preset in PRESETS.items():
+        assert preset["increment"] == 5.0, f"{name} increment should be 5.0"
 
 
 def test_fixed_bars_get_a_wide_rep_range_to_absorb_coarse_jumps():
@@ -443,26 +445,27 @@ def test_fractional_volume_counts_secondaries_at_half():
 
 
 def test_load_progression_adds_the_full_increment_from_an_off_grid_weight():
-    """135 lb is loadable (45 bar + two 45s) but is not a multiple of a 10 lb jump.
-    Re-rounding 145 onto an absolute 10 lb grid gave back 5 lb every single cycle."""
+    """At a 5 lb increment, 137.5 lb is off-grid (not a multiple of 5). Re-rounding
+    142.5 onto an absolute 5 lb grid (banker's rounding) would silently give back
+    2.5 lb instead of adding the full increment."""
     from engine import make_exercise
     smith = make_exercise("smith", "Smith Bench", "smith", primary=["chest"])
-    state = ExerciseState("smith", 135.0, smith.rep_range[1], last_performed_date=TODAY)
+    state = ExerciseState("smith", 137.5, smith.rep_range[1], last_performed_date=TODAY)
     plan = prescribe(smith, state, 3, RACK, False, TODAY)
     top = plan[0].target_reps
     d = progress(smith, state, logged(plan, [top] * 3, [2, 1, 1]), TODAY)
     assert d.diagnosis == Diagnosis.PROGRESS_LOAD
-    assert d.next_weight == 145.0, "must add the full 10 lb, not snap back to 140"
+    assert d.next_weight == 142.5, "must add the full 5 lb, not snap back to 140"
 
 
 def test_layoff_deload_keeps_an_off_grid_weight_loadable():
     from engine import make_exercise
     smith = make_exercise("smith", "Smith Bench", "smith", primary=["chest"])
     stale = TODAY - timedelta(days=30)
-    state = ExerciseState("smith", 135.0, 6, last_performed_date=stale)
+    state = ExerciseState("smith", 137.5, 6, last_performed_date=stale)
     plan = prescribe(smith, state, 3, RACK, False, TODAY)
-    # 10% of 135 is 13.5 -> one 10 lb step down, staying on the same loadable grid
-    assert plan[0].target_weight == 125.0
+    # 10% of 137.5 is 13.75 -> floors to one 5 lb step down: 137.5 - 10 = 127.5
+    assert plan[0].target_weight == 127.5
 
 
 # ------------------------------------------- exercise catalog (pull/legs/core)

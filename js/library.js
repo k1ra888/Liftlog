@@ -10,19 +10,20 @@
   const { Equipment, FailureRisk, exercise } = global.Engine;
 
   // Gym-specific presets. `increment` is the smallest jump ACTUALLY achievable —
-  // not the smallest plate. A 5 lb plate loads a barbell in 10 lb steps because
-  // you put one on each side.
+  // not the smallest plate. Standardized to 5 lb everywhere: with 2.5 lb plates
+  // available, a symmetric barbell/Smith load (one 2.5 per side) moves in 5 lb
+  // steps, not 10.
   const PRESETS = {
     smith: {
       equipment: Equipment.BARBELL,
-      increment: 10.0,
+      increment: 5.0,
       failure_risk: FailureRisk.BAILOUT_POSSIBLE,
       rest: 150,
       rep_range: [6, 10],
     },
     barbell: {
       equipment: Equipment.BARBELL,
-      increment: 10.0,
+      increment: 5.0,
       failure_risk: FailureRisk.NEEDS_SAFETIES,
       rest: 150,
       rep_range: [6, 10],
@@ -36,7 +37,7 @@
     },
     fixed_bar: {
       equipment: Equipment.BARBELL,
-      increment: 10.0,
+      increment: 5.0,
       failure_risk: FailureRisk.BAILOUT_POSSIBLE,
       rest: 120,
       rep_range: [8, 15],
@@ -50,14 +51,14 @@
     },
     machine: {
       equipment: Equipment.MACHINE,
-      increment: 10.0,
+      increment: 5.0,
       failure_risk: FailureRisk.SAFE_TO_FAILURE,
       rest: 90,
       rep_range: [10, 15],
     },
     bodyweight: {
       equipment: Equipment.BODYWEIGHT,
-      increment: 2.5,
+      increment: 5.0,
       failure_risk: FailureRisk.SAFE_TO_FAILURE,
       rest: 120,
       rep_range: [5, 12],

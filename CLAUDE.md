@@ -31,7 +31,7 @@ reachable later via a Bubblewrap/TWA wrap.
 | | |
 |---|---|
 | Units | **pounds** |
-| Smallest plate | **5 lb** → barbell/Smith moves in **10 lb** steps |
+| Smallest plate | **2.5 lb** → all equipment (barbell, Smith, machines, cables) moves in **5 lb** steps |
 | Split | push / pull / legs / rest, as a **rotation, not a calendar** |
 | Gym | commercial, most common machines, Smith machine, cables, fixed-weight bars |
 | Trains | alone (spotter availability is a per-session toggle, not a profile field) |
@@ -79,7 +79,7 @@ apps conventionally do. Each was rejected deliberately.
 
 1. **No calendar deloads.** Stall-triggered only, and always *suggested*, never auto-applied. Contradicted by Coleman et al.
 2. **No MEV/MRV threshold lines** on volume charts. Unvalidated. Counts only.
-3. **No hard-coded 8–12 rep range.** Ranges are per-exercise and chosen to absorb the equipment's load increment. Fixed-weight bars get 8–15 because a 10 lb jump on a 50 lb bar is 20%.
+3. **No hard-coded 8–12 rep range.** Ranges are per-exercise and chosen to absorb the equipment's load increment. Fixed-weight bars get 8–15 to buffer even a 5 lb jump on a light bar (e.g. 10% of a 50 lb bar) — pre-loaded bars still commonly skip weights.
 4. **Do not trust RIR ≥ 4.** Cap it at 3 for all calculations and move by reps rather than load when it is high.
 5. **Do not cut the load when later sets fall short.** That is a fatigue/recovery signal. Only a **set 1** miss is a strength signal. Conflating these is the standard failure of existing apps.
 6. **Do not re-round weights onto an absolute grid.** See bug 3 below.

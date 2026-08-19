@@ -306,6 +306,20 @@ button {
   margin-bottom: 10px;
 }
 
+.card-heading {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.logged-confirm {
+  color: var(--ok);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
 .stepper-group {
   display: flex;
   gap: 10px;
@@ -343,9 +357,28 @@ button {
 
 .stepper-controls .stepper-value {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   text-align: center;
   font-size: 1.15rem;
   font-weight: 700;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  height: var(--tap);
+  padding: 0;
+  -moz-appearance: textfield;
+}
+/* hide the native up/down spinner arrows — the +/- buttons already do that job */
+.stepper-controls .stepper-value::-webkit-outer-spin-button,
+.stepper-controls .stepper-value::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.stepper-controls .stepper-value:focus {
+  background: var(--card);
 }
 
 .btn {

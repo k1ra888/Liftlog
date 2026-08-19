@@ -17,19 +17,21 @@ from .models import Equipment, Exercise, FailureRisk
 
 
 # Gym-specific presets. `increment` is the smallest jump ACTUALLY achievable —
-# not the smallest plate. A 5 lb plate loads a barbell in 10 lb steps because you
-# put one on each side.
+# not the smallest plate. Standardized to 5 lb everywhere: with 2.5 lb plates
+# available, a symmetric barbell/Smith load (one 2.5 per side) moves in 5 lb
+# steps, not 10 — the earlier "5 lb smallest plate -> 10 lb barbell steps" premise
+# was wrong for this gym. Dumbbells and cable stacks were already 5 lb.
 PRESETS: Dict[str, dict] = {
     "smith": {
         "equipment": Equipment.BARBELL,
-        "increment": 10.0,              # 5 lb plate per side
+        "increment": 5.0,               # 2.5 lb plate per side
         "failure_risk": FailureRisk.BAILOUT_POSSIBLE,   # rotate the bar to rack it anywhere
         "rest": 150,
         "rep_range": (6, 10),
     },
     "barbell": {
         "equipment": Equipment.BARBELL,
-        "increment": 10.0,
+        "increment": 5.0,               # 2.5 lb plate per side
         "failure_risk": FailureRisk.NEEDS_SAFETIES,
         "rest": 150,
         "rep_range": (6, 10),
@@ -43,12 +45,13 @@ PRESETS: Dict[str, dict] = {
     },
     "fixed_bar": {
         "equipment": Equipment.BARBELL,
-        "increment": 10.0,              # pre-loaded bars rarely step finer
+        "increment": 5.0,
         "failure_risk": FailureRisk.BAILOUT_POSSIBLE,
         "rest": 120,
-        # Deliberately wide: a 10 lb jump on a 50 lb bar is 20%. The rep range has to
-        # absorb what the equipment cannot. Schoenfeld et al. — any range >= ~30% 1RM
-        # grows muscle, so we are free to pick the range that fits the hardware.
+        # Kept wide even at 5 lb (10% of a 50 lb bar, gentler than the 20% this was
+        # originally sized for): pre-loaded bars still typically skip weights, and
+        # Schoenfeld et al. — any range >= ~30% 1RM grows muscle — means there's no
+        # cost to keeping the buffer.
         "rep_range": (8, 15),
     },
     "cable": {
@@ -60,14 +63,14 @@ PRESETS: Dict[str, dict] = {
     },
     "machine": {
         "equipment": Equipment.MACHINE,
-        "increment": 10.0,
+        "increment": 5.0,
         "failure_risk": FailureRisk.SAFE_TO_FAILURE,
         "rest": 90,
         "rep_range": (10, 15),
     },
     "bodyweight": {
         "equipment": Equipment.BODYWEIGHT,
-        "increment": 2.5,
+        "increment": 5.0,
         "failure_risk": FailureRisk.SAFE_TO_FAILURE,
         "rest": 120,
         "rep_range": (5, 12),

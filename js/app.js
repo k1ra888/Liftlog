@@ -26,6 +26,19 @@
     return [];
   }
 
+  // The most recent session's actually-logged working sets for an exercise, or
+  // null if never logged. Distinct from a fresh prescribe() call: prescribe()
+  // always returns a forward-looking target (the RIR ramp always ends at 0 on the
+  // last set, regardless of history) — this is what actually happened, for
+  // reference, so "target" and "what I did" are never confused for each other.
+  async function getLastSessionSets(exerciseId) {
+    const logs = await Storage.getSetLogsForExercise(exerciseId);
+    const working = logs.filter((l) => !l.is_warmup);
+    if (!working.length) return null;
+    const lastDate = working.reduce((a, b) => (a > b.date ? a : b.date), working[0].date);
+    return working.filter((l) => l.date === lastDate).sort((a, b) => a.set_index - b.set_index);
+  }
+
   // ---------------------------------------------------------------- app state
 
   const state = {
@@ -202,7 +215,7 @@
       overlaySwap.classList.add("hidden");
     }
 
-    renderIntro();
+    await renderIntro();
   }
 
   function openSwapPicker(ex) {
@@ -237,17 +250,43 @@
     return ex.failure_risk === Engine.FailureRisk.NEEDS_SAFETIES && !state.gymProfile.has_rack_safeties;
   }
 
-  function renderIntro() {
+  async function renderIntro() {
     const { ex, priorState } = session;
     overlayBody.innerHTML = "";
 
     if (priorState) {
+      // What you actually did last time — separate from the fresh target below,
+      // so the two are never mistaken for each other. The target's RIR always
+      // ends the ramp at 0 on the last set regardless of what happened before;
+      // this is the only place that shows what you actually logged.
+      const lastSets = await getLastSessionSets(ex.id);
+      if (lastSets && lastSets.length) {
+        const lastCard = document.createElement("div");
+        lastCard.className = "card";
+        const lastHeading = document.createElement("div");
+        lastHeading.className = "card-heading";
+        lastHeading.textContent = `Last time (${lastSets[0].date})`;
+        lastCard.appendChild(lastHeading);
+        lastSets.forEach((s) => {
+          const row = document.createElement("div");
+          row.className = "target-row";
+          const rirText = s.rir === null || s.rir === undefined ? "—" : s.rir;
+          row.textContent = `Set ${s.set_index}: ${s.weight} lb × ${s.reps} · RIR ${rirText}`;
+          lastCard.appendChild(row);
+        });
+        overlayBody.appendChild(lastCard);
+      }
+
       session.plan = Engine.prescribe(
         ex, priorState, NUM_SETS, Engine.gymProfile(state.gymProfile),
         session.spotterPresent === true, todayIso()
       );
       const planCard = document.createElement("div");
       planCard.className = "card";
+      const planHeading = document.createElement("div");
+      planHeading.className = "card-heading";
+      planHeading.textContent = "Today's target";
+      planCard.appendChild(planHeading);
       session.plan.forEach((p) => {
         const row = document.createElement("div");
         row.className = "target-row";
@@ -344,11 +383,12 @@
         target_rir: target ? target.target_rir : 0,
         stopped_at_cap: target ? target.capped : false,
       }));
+      const justLogged = session.sets[session.sets.length - 1];
       if (setIndex + 1 < NUM_SETS) {
         session.setIndex += 1;
-        renderRestTimer(ex.default_rest_seconds);
+        renderRestTimer(ex.default_rest_seconds, justLogged);
       } else {
-        finishExercise();
+        finishExercise(justLogged);
       }
     });
     card.appendChild(logBtn);
@@ -368,27 +408,39 @@
     controls.className = "stepper-controls";
 
     const minus = document.createElement("button");
+    minus.type = "button";
     minus.textContent = "−";
-    const val = document.createElement("div");
+
+    // A real number input, not a plain div — tapping it opens the phone's native
+    // numeric keypad, so a set can be logged by typing the number directly
+    // instead of only tapping +/- one step at a time.
+    const val = document.createElement("input");
+    val.type = "number";
+    val.inputMode = "decimal";
     val.className = "stepper-value";
-    val.textContent = values[key];
+    val.value = values[key];
+
     const plus = document.createElement("button");
+    plus.type = "button";
     plus.textContent = "+";
 
     function clamp(v) {
-      if (min !== null && v < min) return min;
-      if (max !== null && v > max) return max;
+      if (Number.isNaN(v)) v = values[key];
+      if (min !== null && v < min) v = min;
+      if (max !== null && v > max) v = max;
       return Math.round(v * 100) / 100;
     }
 
-    minus.addEventListener("click", () => {
-      values[key] = clamp(values[key] - step);
-      val.textContent = values[key];
-    });
-    plus.addEventListener("click", () => {
-      values[key] = clamp(values[key] + step);
-      val.textContent = values[key];
-    });
+    function setValue(v) {
+      values[key] = clamp(v);
+      val.value = values[key];
+    }
+
+    minus.addEventListener("click", () => setValue(values[key] - step));
+    plus.addEventListener("click", () => setValue(values[key] + step));
+    // Fires on blur / keyboard "done" — not on every keystroke, so a partial
+    // entry like "14" while typing "145" doesn't get clamped mid-type.
+    val.addEventListener("change", () => setValue(parseFloat(val.value)));
 
     controls.appendChild(minus);
     controls.appendChild(val);
@@ -399,8 +451,18 @@
 
   // ---------------------------------------------------------------- rest timer
 
-  function renderRestTimer(seconds) {
+  function loggedConfirmRow(justLogged) {
+    const confirm = document.createElement("div");
+    confirm.className = "card logged-confirm";
+    const rirText = justLogged.rir === null || justLogged.rir === undefined ? "—" : justLogged.rir;
+    confirm.textContent = `✓ Logged set ${justLogged.set_index}: ${justLogged.weight} lb × ${justLogged.reps} · RIR ${rirText}`;
+    return confirm;
+  }
+
+  function renderRestTimer(seconds, justLogged) {
     overlayBody.innerHTML = "";
+    if (justLogged) overlayBody.appendChild(loggedConfirmRow(justLogged));
+
     const card = document.createElement("div");
     card.className = "card timer";
     const label = document.createElement("div");
@@ -444,11 +506,12 @@
 
   // ---------------------------------------------------------------- finish
 
-  async function finishExercise() {
+  async function finishExercise(justLogged) {
     const { ex, priorState, sets } = session;
     const today = todayIso();
 
     overlayBody.innerHTML = "";
+    if (justLogged) overlayBody.appendChild(loggedConfirmRow(justLogged));
 
     if (!priorState) {
       const newState = Engine.bootstrap(ex, sets[0], today);
