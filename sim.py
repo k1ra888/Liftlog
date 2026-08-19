@@ -10,8 +10,11 @@ Run:  python sim.py
 from datetime import date, timedelta
 
 from engine import (
+    CALIBRATION_MAX_SETS,
+    CalibrationRating,
     Equipment, Exercise, ExerciseState, FailureRisk, GymProfile, SetLog,
-    apply, make_exercise, prescribe, progress,
+    apply, bootstrap, calibrate_step, calibration_target_reps, make_exercise,
+    prescribe, progress,
 )
 
 # Your gym: 5 lb smallest plate, so the Smith bar moves in 10 lb steps.
@@ -99,9 +102,68 @@ def run(exercise: Exercise, start_lb: float, ceiling_lb: float, sessions: int,
     print("\n  * = RIR target raised by the safety floor")
 
 
+LAT_PULLDOWN = make_exercise(
+    "lat_pulldown", "Lat Pulldown", "cable",
+    primary=["lats"], secondary=["biceps", "upper back"],
+    substitutes=["Pull-Up"],
+)
+
+
+def calibration_perform(target_reps: int, true_weight: float, increment: float, attempted: float):
+    """Same idea as make_lifter() above, but for the calibration ramp: a lifter
+    with a real capacity ceiling at the target rep count, reporting the 5-way
+    category a real person would pick rather than a precise RIR."""
+    steps_off = round((true_weight - attempted) / increment)
+    achievable = max(0, target_reps + steps_off * 2)
+    if achievable >= target_reps + 6:
+        rating = CalibrationRating.VERY_EASY
+    elif achievable > target_reps:
+        rating = CalibrationRating.SLIGHTLY_EASY
+    elif achievable == target_reps:
+        rating = CalibrationRating.HIT_AT_LIMIT
+    elif achievable >= target_reps - 3:
+        rating = CalibrationRating.SLIGHTLY_HARD
+    else:
+        rating = CalibrationRating.VERY_HARD
+    actual_reps = min(achievable, target_reps)   # stops at the assigned number when it's easy
+    return rating, actual_reps
+
+
+def run_calibration(exercise: Exercise, first_guess_lb: float, true_weight_lb: float) -> None:
+    target = calibration_target_reps(exercise)
+    print(f"\n{'=' * 80}\n  CALIBRATION — {exercise.name} — first time, no history"
+          f"\n  aiming for {target} reps (middle of {exercise.rep_range[0]}-{exercise.rep_range[1]})"
+          f"  ·  jump {exercise.load_increment:.0f} lb\n{'=' * 80}")
+
+    weight = first_guess_lb
+    final = None
+    for i in range(1, CALIBRATION_MAX_SETS + 1):
+        rating, reps = calibration_perform(target, true_weight_lb, exercise.load_increment, weight)
+        step = calibrate_step(exercise, weight, rating, reps)
+        print(f"  Set {i}: attempt {weight:>3.0f} lb x {target}  ->  got {reps} reps, "
+              f"rated {rating.value:<13}  ->  next: {step.next_weight:>3.0f} lb"
+              + ("  [CONVERGED]" if step.converged else ""))
+        final = SetLog(set_index=i, weight=weight, reps=reps,
+                        target_weight=0, target_reps=0, target_rir=0)
+        if step.converged:
+            break
+        weight = step.next_weight
+    else:
+        print(f"  Budget exhausted after {CALIBRATION_MAX_SETS} sets — using the last set as the baseline anyway.")
+
+    state = bootstrap(exercise, final, date(2026, 8, 15))
+    print(f"  -> Next session starts from: {state.current_weight:.0f} lb x {state.current_rep_target}")
+
+
 if __name__ == "__main__":
     # Your actual push-day bench. No safety cap: a Smith bar racks anywhere.
     run(SMITH_BENCH, start_lb=135, ceiling_lb=185, sessions=14, rack_safeties=False)
 
     # Contrast: a free barbell, training alone, no pins. Watch the last set get capped.
     run(BARBELL_BENCH, start_lb=135, ceiling_lb=185, sessions=4, rack_safeties=False)
+
+    # Calibration: a brand-new exercise, first guess too light — should climb and converge.
+    run_calibration(LAT_PULLDOWN, first_guess_lb=40, true_weight_lb=65)
+
+    # Calibration: first guess too heavy — should drop and converge.
+    run_calibration(LAT_PULLDOWN, first_guess_lb=90, true_weight_lb=65)

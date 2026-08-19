@@ -120,6 +120,7 @@ Run: `pip install -r requirements.txt && pytest && python sim.py`
 - **`stopped_at_cap`** disambiguates a capped RIR 1 ("I had more, was told to stop" → progress) from a true RIR 1 ("that was everything" → hold). Same logged value, opposite correct action.
 - **Progression:** double progression — reps to the top of range, then load, reset reps.
 - **Diagnoses:** `PROGRESS_REPS`, `PROGRESS_LOAD`, `HOLD_CONSOLIDATE`, `REPEAT_TOO_HEAVY`, `REPEAT_FATIGUE`, `STALL_INTERVENTION`, `FIRST_TIME`.
+- **Calibration** (`calibrate_step()`, spec.md §5): a first-time exercise has no history to prescribe from, so instead of one blind guess it runs a short reactive ramp — up to `CALIBRATION_MAX_SETS` (4) sets, each rated on a 5-way scale (very easy → very hard) against a fixed target rep count (the middle of the exercise's rep range), adjusting weight up/down between sets and locking in once a set lands exactly at the target at true failure. Explicitly a Tier 3 practitioner convention, not an RCT-validated algorithm — see the function's docstring for exactly what is and isn't evidence-backed. The final calibration set (not set 1's opening guess) feeds `bootstrap()`.
 
 ### Known v1 limitation
 

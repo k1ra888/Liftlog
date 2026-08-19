@@ -453,14 +453,65 @@
     });
   }
 
+  // ---------------------------------------------------------------- calibration
+  // A first-time exercise has no history, so there's nothing to read effort
+  // from. Short reactive ramp instead of one blind guess — see
+  // engine/progression.py's calibrate_step() docstring for the full reasoning
+  // and evidence-tier breakdown; this is a straight port.
+
+  const CalibrationRating = Object.freeze({
+    VERY_EASY: "very_easy",
+    SLIGHTLY_EASY: "slightly_easy",
+    HIT_AT_LIMIT: "hit_at_limit",
+    SLIGHTLY_HARD: "slightly_hard",
+    VERY_HARD: "very_hard",
+  });
+
+  const CALIBRATION_MAX_SETS = 4;
+  const CALIBRATION_STEP_CAP = 3;
+
+  function calibrationTargetReps(ex) {
+    const [lo, hi] = ex.rep_range;
+    return pyRound((lo + hi) / 2);
+  }
+
+  function calibrationStep({ next_weight, converged }) {
+    return { next_weight, converged };
+  }
+
+  function calibrateStep(ex, weight, rating, actualReps) {
+    const inc = ex.load_increment;
+
+    if (rating === CalibrationRating.HIT_AT_LIMIT) {
+      return calibrationStep({ next_weight: weight, converged: true });
+    }
+    if (rating === CalibrationRating.VERY_EASY) {
+      return calibrationStep({ next_weight: pyRound(weight + 2 * inc, 2), converged: false });
+    }
+    if (rating === CalibrationRating.SLIGHTLY_EASY) {
+      return calibrationStep({ next_weight: pyRound(weight + inc, 2), converged: false });
+    }
+
+    // SLIGHTLY_HARD / VERY_HARD: size the drop by actual deviation from target,
+    // not just which button was pressed.
+    const target = calibrationTargetReps(ex);
+    const deviation = Math.max(target - actualReps, 1);
+    const steps = Math.min(Math.ceil(deviation / 2), CALIBRATION_STEP_CAP);
+
+    const floor = ex.is_bodyweight ? 0.0 : inc;
+    const nextWeight = Math.max(pyRound(weight - steps * inc, 2), floor);
+    return calibrationStep({ next_weight: nextWeight, converged: false });
+  }
+
   // ---------------------------------------------------------------- exports
 
   global.Engine = {
-    Equipment, FailureRisk, CapReason, Outcome, Diagnosis,
+    Equipment, FailureRisk, CapReason, Outcome, Diagnosis, CalibrationRating,
     exercise, gymProfile, setPrescription, setLog, exerciseState, decision,
     FAILURE_DROPOFF_BAND, LAYOFF_DAYS, LAYOFF_DROP, STALL_DROP, STALL_THRESHOLD,
-    FATIGUE_PATIENCE, RIR_TRUST_CAP,
+    FATIGUE_PATIENCE, RIR_TRUST_CAP, CALIBRATION_MAX_SETS, CALIBRATION_STEP_CAP,
     pyRound, roundToIncrement, rirRamp, workingSets, daysBetween,
     rirFloor, prescribe, classify, dropoffNotes, progress, apply, bootstrap,
+    calibrationTargetReps, calibrateStep,
   };
 })(typeof window !== "undefined" ? window : globalThis);

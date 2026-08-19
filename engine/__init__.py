@@ -1,4 +1,6 @@
 from .models import (
+    CalibrationRating,
+    CalibrationStep,
     CapReason,
     Decision,
     Diagnosis,
@@ -12,9 +14,13 @@ from .models import (
     SetPrescription,
 )
 from .progression import (
+    CALIBRATION_MAX_SETS,
+    CALIBRATION_STEP_CAP,
     FAILURE_DROPOFF_BAND,
     apply,
     bootstrap,
+    calibrate_step,
+    calibration_target_reps,
     classify,
     prescribe,
     progress,
@@ -30,9 +36,12 @@ from .library import (
 from .safety import rir_floor
 
 __all__ = [
-    "CapReason", "Decision", "Diagnosis", "Equipment", "Exercise", "ExerciseState",
+    "CalibrationRating", "CalibrationStep", "CapReason", "Decision", "Diagnosis",
+    "Equipment", "Exercise", "ExerciseState",
     "FailureRisk", "GymProfile", "Outcome", "SetLog", "SetPrescription",
-    "FAILURE_DROPOFF_BAND", "apply", "bootstrap", "classify", "prescribe", "progress",
+    "CALIBRATION_MAX_SETS", "CALIBRATION_STEP_CAP",
+    "FAILURE_DROPOFF_BAND", "apply", "bootstrap", "calibrate_step",
+    "calibration_target_reps", "classify", "prescribe", "progress",
     "rir_ramp", "round_to_increment", "rir_floor",
     "PRESETS", "PUSH_DAY", "PUSH_DAY_SESSION", "PUSH_EXERCISES", "PULL_DAY",
     "PULL_EXERCISES", "LEG_DAY", "LEG_EXERCISES", "CORE_EXERCISES",

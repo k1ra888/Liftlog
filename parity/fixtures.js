@@ -1956,6 +1956,311 @@ const FIXTURES = [
     "kind": "state"
   },
   {
+    "name": "calibration_target_reps(lat_pulldown)",
+    "fn": "calibrationTargetReps",
+    "args": [
+      {
+        "id": "lat_pulldown",
+        "name": "Lat Pulldown",
+        "primary_muscles": [
+          "lats"
+        ],
+        "secondary_muscles": [
+          "biceps",
+          "upper back"
+        ],
+        "rep_range": [
+          10,
+          15
+        ],
+        "load_increment": 5.0,
+        "equipment": "machine",
+        "failure_risk": "safe_to_failure",
+        "substitutes": [],
+        "default_rest_seconds": 120,
+        "is_bodyweight": false
+      }
+    ],
+    "expected": 12,
+    "kind": "scalar"
+  },
+  {
+    "name": "calibration_target_reps(barbell_bench_press)",
+    "fn": "calibrationTargetReps",
+    "args": [
+      {
+        "id": "barbell_bench_press",
+        "name": "Barbell Bench Press",
+        "primary_muscles": [
+          "chest",
+          "front delts"
+        ],
+        "secondary_muscles": [
+          "triceps"
+        ],
+        "rep_range": [
+          5,
+          8
+        ],
+        "load_increment": 2.5,
+        "equipment": "barbell",
+        "failure_risk": "needs_safeties",
+        "substitutes": [
+          "Dumbbell Press",
+          "Machine Chest Press"
+        ],
+        "default_rest_seconds": 120,
+        "is_bodyweight": false
+      }
+    ],
+    "expected": 6,
+    "kind": "scalar"
+  },
+  {
+    "name": "calibrate: very easy adds 2 increments",
+    "fn": "calibrateStep",
+    "args": [
+      {
+        "id": "lat_pulldown",
+        "name": "Lat Pulldown",
+        "primary_muscles": [
+          "lats"
+        ],
+        "secondary_muscles": [
+          "biceps",
+          "upper back"
+        ],
+        "rep_range": [
+          10,
+          15
+        ],
+        "load_increment": 5.0,
+        "equipment": "machine",
+        "failure_risk": "safe_to_failure",
+        "substitutes": [],
+        "default_rest_seconds": 120,
+        "is_bodyweight": false
+      },
+      60.0,
+      "very_easy",
+      18
+    ],
+    "expected": {
+      "next_weight": 70.0,
+      "converged": false
+    },
+    "kind": "state"
+  },
+  {
+    "name": "calibrate: slightly easy adds 1 increment",
+    "fn": "calibrateStep",
+    "args": [
+      {
+        "id": "lat_pulldown",
+        "name": "Lat Pulldown",
+        "primary_muscles": [
+          "lats"
+        ],
+        "secondary_muscles": [
+          "biceps",
+          "upper back"
+        ],
+        "rep_range": [
+          10,
+          15
+        ],
+        "load_increment": 5.0,
+        "equipment": "machine",
+        "failure_risk": "safe_to_failure",
+        "substitutes": [],
+        "default_rest_seconds": 120,
+        "is_bodyweight": false
+      },
+      60.0,
+      "slightly_easy",
+      13
+    ],
+    "expected": {
+      "next_weight": 65.0,
+      "converged": false
+    },
+    "kind": "state"
+  },
+  {
+    "name": "calibrate: hit at limit converges",
+    "fn": "calibrateStep",
+    "args": [
+      {
+        "id": "lat_pulldown",
+        "name": "Lat Pulldown",
+        "primary_muscles": [
+          "lats"
+        ],
+        "secondary_muscles": [
+          "biceps",
+          "upper back"
+        ],
+        "rep_range": [
+          10,
+          15
+        ],
+        "load_increment": 5.0,
+        "equipment": "machine",
+        "failure_risk": "safe_to_failure",
+        "substitutes": [],
+        "default_rest_seconds": 120,
+        "is_bodyweight": false
+      },
+      60.0,
+      "hit_at_limit",
+      12
+    ],
+    "expected": {
+      "next_weight": 60.0,
+      "converged": true
+    },
+    "kind": "state"
+  },
+  {
+    "name": "calibrate: small miss drops 1 increment",
+    "fn": "calibrateStep",
+    "args": [
+      {
+        "id": "lat_pulldown",
+        "name": "Lat Pulldown",
+        "primary_muscles": [
+          "lats"
+        ],
+        "secondary_muscles": [
+          "biceps",
+          "upper back"
+        ],
+        "rep_range": [
+          10,
+          15
+        ],
+        "load_increment": 5.0,
+        "equipment": "machine",
+        "failure_risk": "safe_to_failure",
+        "substitutes": [],
+        "default_rest_seconds": 120,
+        "is_bodyweight": false
+      },
+      60.0,
+      "slightly_hard",
+      10
+    ],
+    "expected": {
+      "next_weight": 55.0,
+      "converged": false
+    },
+    "kind": "state"
+  },
+  {
+    "name": "calibrate: big miss capped at 3 increments",
+    "fn": "calibrateStep",
+    "args": [
+      {
+        "id": "lat_pulldown",
+        "name": "Lat Pulldown",
+        "primary_muscles": [
+          "lats"
+        ],
+        "secondary_muscles": [
+          "biceps",
+          "upper back"
+        ],
+        "rep_range": [
+          10,
+          15
+        ],
+        "load_increment": 5.0,
+        "equipment": "machine",
+        "failure_risk": "safe_to_failure",
+        "substitutes": [],
+        "default_rest_seconds": 120,
+        "is_bodyweight": false
+      },
+      60.0,
+      "very_hard",
+      2
+    ],
+    "expected": {
+      "next_weight": 45.0,
+      "converged": false
+    },
+    "kind": "state"
+  },
+  {
+    "name": "calibrate: weighted floors at 1 increment",
+    "fn": "calibrateStep",
+    "args": [
+      {
+        "id": "lat_pulldown",
+        "name": "Lat Pulldown",
+        "primary_muscles": [
+          "lats"
+        ],
+        "secondary_muscles": [
+          "biceps",
+          "upper back"
+        ],
+        "rep_range": [
+          10,
+          15
+        ],
+        "load_increment": 5.0,
+        "equipment": "machine",
+        "failure_risk": "safe_to_failure",
+        "substitutes": [],
+        "default_rest_seconds": 120,
+        "is_bodyweight": false
+      },
+      10.0,
+      "very_hard",
+      0
+    ],
+    "expected": {
+      "next_weight": 5.0,
+      "converged": false
+    },
+    "kind": "state"
+  },
+  {
+    "name": "calibrate: bodyweight floors at 0",
+    "fn": "calibrateStep",
+    "args": [
+      {
+        "id": "pullup",
+        "name": "Pull-Up",
+        "primary_muscles": [
+          "lats"
+        ],
+        "secondary_muscles": [
+          "biceps"
+        ],
+        "rep_range": [
+          5,
+          10
+        ],
+        "load_increment": 2.5,
+        "equipment": "bodyweight",
+        "failure_risk": "safe_to_failure",
+        "substitutes": [],
+        "default_rest_seconds": 120,
+        "is_bodyweight": true
+      },
+      0.0,
+      "very_hard",
+      0
+    ],
+    "expected": {
+      "next_weight": 0.0,
+      "converged": false
+    },
+    "kind": "state"
+  },
+  {
     "name": "weekly_volume: secondaries at half",
     "fn": "weeklyVolume",
     "args": [

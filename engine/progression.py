@@ -10,6 +10,8 @@ from datetime import date, timedelta
 from typing import List, Optional, Sequence
 
 from .models import (
+    CalibrationRating,
+    CalibrationStep,
     CapReason,
     Decision,
     Diagnosis,
@@ -37,6 +39,68 @@ STALL_THRESHOLD = 3
 FATIGUE_PATIENCE = 2       # tolerate transient fatigue this many sessions before
                            # progressing on set 1's merit anyway
 RIR_TRUST_CAP = 3          # RIR 4+ is close to noise (Remmert et al. 2023)
+
+# ---- calibration (spec.md §5) ----
+# A first-time exercise has no history, so there's nothing to read effort from.
+# This is a short reactive ramp instead of one blind guess: each set's outcome
+# adjusts the next set's weight, converging on a real working weight instead of
+# committing to set 1's guess for every session after it. Explicitly a Tier 3
+# practitioner convention (a ramp-to-find-your-weight is common coaching
+# practice) — there is no RCT behind this specific algorithm. What IS
+# evidence-grounded: reacting to proximity-to-failure at all (Refalo et al.
+# 2024), and treating a "very easy" self-report as only a coarse up/down signal
+# rather than a precise number (Remmert et al. 2023 — RIR-style estimates are
+# unreliable far from failure).
+CALIBRATION_MAX_SETS = 4
+CALIBRATION_STEP_CAP = 3   # never move more than 3 increments off one set's report
+
+
+def calibration_target_reps(exercise: Exercise) -> int:
+    """The rep count calibration aims for: the middle of the exercise's own rep
+    range, not a number the lifter has to pick."""
+    lo, hi = exercise.rep_range
+    return round((lo + hi) / 2)
+
+
+def calibrate_step(
+    exercise: Exercise,
+    weight: float,
+    rating: CalibrationRating,
+    actual_reps: int,
+) -> CalibrationStep:
+    """Given what just happened on one calibration set, recommend the next set's
+    weight (or report that calibration has converged and there's nothing left to
+    search for).
+
+    Deliberately weight-only — reps stay pinned at calibration_target_reps() for
+    every set, so there is exactly one lever moving at a time.
+    """
+    inc = exercise.load_increment
+
+    if rating == CalibrationRating.HIT_AT_LIMIT:
+        return CalibrationStep(next_weight=weight, converged=True)
+
+    if rating == CalibrationRating.VERY_EASY:
+        return CalibrationStep(next_weight=round(weight + 2 * inc, 2), converged=False)
+
+    if rating == CalibrationRating.SLIGHTLY_EASY:
+        return CalibrationStep(next_weight=round(weight + inc, 2), converged=False)
+
+    # SLIGHTLY_HARD / VERY_HARD: size the drop by how far short of target the
+    # lifter actually came, not just which of the two buttons was pressed — the
+    # buttons say which side of "hit it" you're on, the logged reps say by how
+    # much. Every 2 reps short adds one more increment of drop, capped so one bad
+    # guess can't swing the suggestion wildly.
+    target = calibration_target_reps(exercise)
+    deviation = max(target - actual_reps, 1)
+    steps = min(-(-deviation // 2), CALIBRATION_STEP_CAP)  # ceil(deviation / 2), capped
+
+    # Bodyweight work floors at 0 added weight (that's a real, valid state — pure
+    # bodyweight). Everything else floors at one increment; per spec.md §5 this
+    # never drops to zero/negative, since that isn't a loadable weight.
+    floor = 0.0 if exercise.is_bodyweight else inc
+    next_weight = max(round(weight - steps * inc, 2), floor)
+    return CalibrationStep(next_weight=next_weight, converged=False)
 
 
 # ---------------------------------------------------------------- helpers

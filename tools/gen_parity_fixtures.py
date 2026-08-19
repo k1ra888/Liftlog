@@ -23,9 +23,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from engine import (
+    CalibrationRating,
     Equipment, Exercise, ExerciseState, FailureRisk, GymProfile, SetLog,
-    apply, bootstrap, classify, prescribe, progress, rir_floor, rir_ramp,
-    round_to_increment,
+    apply, bootstrap, calibrate_step, calibration_target_reps, classify,
+    prescribe, progress, rir_floor, rir_ramp, round_to_increment,
 )
 from engine.library import rotation_volume, routine_preview, weekly_volume, next_in_rotation
 
@@ -254,6 +255,24 @@ add("bootstrap: clamps reps to range top", "bootstrap", [j(BENCH), j(_too_many),
 _too_few = SetLog(set_index=1, weight=95.0, reps=1, target_weight=0, target_reps=0, target_rir=0)
 add("bootstrap: clamps reps to range floor", "bootstrap", [j(BENCH), j(_too_few), TODAY.isoformat()],
     j(bootstrap(BENCH, _too_few, TODAY)), "state")
+
+# ---------------------------------------------------------------- calibration
+
+for n, expected in [(PULLDOWN, calibration_target_reps(PULLDOWN)), (BENCH, calibration_target_reps(BENCH))]:
+    add(f"calibration_target_reps({n.id})", "calibrationTargetReps", [j(n)], expected, "scalar")
+
+for name, ex, weight, rating, reps in [
+    ("calibrate: very easy adds 2 increments", PULLDOWN, 60.0, CalibrationRating.VERY_EASY, 18),
+    ("calibrate: slightly easy adds 1 increment", PULLDOWN, 60.0, CalibrationRating.SLIGHTLY_EASY, 13),
+    ("calibrate: hit at limit converges", PULLDOWN, 60.0, CalibrationRating.HIT_AT_LIMIT, 12),
+    ("calibrate: small miss drops 1 increment", PULLDOWN, 60.0, CalibrationRating.SLIGHTLY_HARD, 10),
+    ("calibrate: big miss capped at 3 increments", PULLDOWN, 60.0, CalibrationRating.VERY_HARD, 2),
+    ("calibrate: weighted floors at 1 increment", PULLDOWN, 10.0, CalibrationRating.VERY_HARD, 0),
+    ("calibrate: bodyweight floors at 0", PULLUP, 0.0, CalibrationRating.VERY_HARD, 0),
+]:
+    step = calibrate_step(ex, weight, rating, reps)
+    add(name, "calibrateStep", [j(ex), weight, rating.value, reps],
+        {"next_weight": step.next_weight, "converged": step.converged}, "state")
 
 # ---------------------------------------------------------------- volume
 

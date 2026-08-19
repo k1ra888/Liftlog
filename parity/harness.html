@@ -42,6 +42,8 @@ message/notes/advice strings are deliberately out of scope.</p>
     progress: (ex, state, sets, today) => Engine.progress(ex, state, sets, today),
     apply: (state, dec, today) => Engine.apply(state, dec, today),
     bootstrap: (ex, log, today) => Engine.bootstrap(ex, log, today),
+    calibrationTargetReps: (ex) => Engine.calibrationTargetReps(ex),
+    calibrateStep: (ex, weight, rating, reps) => Engine.calibrateStep(ex, weight, rating, reps),
     weeklyVolume: (logged) => Library.weeklyVolume(logged),
     rotationVolume: (loggedByDay) => Library.rotationVolume(loggedByDay),
     routinePreview: (n) => Library.routinePreview(n),

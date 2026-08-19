@@ -122,3 +122,27 @@ class Decision:
     consecutive_fatigue: int = 0
     notes: List[str] = field(default_factory=list)
     intervention_options: List[str] = field(default_factory=list)
+
+
+class CalibrationRating(str, Enum):
+    """Self-report scale for a first-time exercise's calibration ramp — spec.md
+    §5. Replaces raw RIR for this specific flow: a lifter has no baseline
+    intuition for RIR on a movement they've never done, but "did I hit the
+    target rep count, and how did it feel" is concrete and self-report-friendly
+    regardless of experience. Ordered easy -> hard on purpose (Enum iteration
+    order matters nowhere in the engine, but it should still read that way)."""
+
+    VERY_EASY = "very_easy"           # well past target reps, lots left
+    SLIGHTLY_EASY = "slightly_easy"   # hit target with some room left
+    HIT_AT_LIMIT = "hit_at_limit"     # hit target reps exactly at true failure
+    SLIGHTLY_HARD = "slightly_hard"   # came up short of target
+    VERY_HARD = "very_hard"           # came up well short of target
+
+
+@dataclass
+class CalibrationStep:
+    """What calibrate_step() recommends for the NEXT set, or the fact that
+    calibration has already converged and there's nothing left to search for."""
+
+    next_weight: float
+    converged: bool

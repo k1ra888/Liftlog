@@ -205,7 +205,10 @@
   async function openExerciseIntro(slotIndex) {
     const ex = state.daySlots[slotIndex];
     const priorState = await Storage.getState(ex.id);
-    session = { slotIndex, ex, priorState, plan: null, sets: [], setIndex: 0, numSets: DEFAULT_NUM_SETS };
+    session = {
+      slotIndex, ex, priorState, plan: null, sets: [], setIndex: 0, numSets: DEFAULT_NUM_SETS,
+      calibWeight: ex.is_bodyweight ? 0 : ex.load_increment,
+    };
 
     overlayTitle.textContent = ex.name;
     overlay.classList.remove("hidden");
@@ -217,7 +220,11 @@
       overlaySwap.classList.add("hidden");
     }
 
-    await renderIntro();
+    if (priorState) {
+      await renderIntro();
+    } else {
+      renderCalibrationIntro();
+    }
   }
 
   function openSwapPicker(ex) {
@@ -244,7 +251,10 @@
     const back = document.createElement("button");
     back.className = "link-btn";
     back.textContent = "cancel";
-    back.addEventListener("click", () => renderIntro());
+    back.addEventListener("click", () => {
+      if (session.priorState) renderIntro();
+      else renderCalibrationIntro();
+    });
     overlayBody.appendChild(back);
   }
 
@@ -304,64 +314,57 @@
   // (via the token) makes a superseded render a no-op instead of a duplicate.
   let introRenderToken = 0;
 
+  // Only ever called for a RETURNING exercise (priorState exists) — first-time
+  // exercises go through renderCalibrationIntro() instead. See openExerciseIntro().
   async function renderIntro() {
     const myToken = ++introRenderToken;
     const { ex, priorState } = session;
     const frag = document.createDocumentFragment();
 
-    if (priorState) {
-      // What you actually did last time — separate from the fresh target below,
-      // so the two are never mistaken for each other. The target's RIR always
-      // ends the ramp at 0 on the last set regardless of what happened before;
-      // this is the only place that shows what you actually logged.
-      const lastSets = await getLastSessionSets(ex.id);
-      if (lastSets && lastSets.length) {
-        const lastCard = document.createElement("div");
-        lastCard.className = "card";
-        const lastHeading = document.createElement("div");
-        lastHeading.className = "card-heading";
-        lastHeading.textContent = `Last time (${lastSets[0].date})`;
-        lastCard.appendChild(lastHeading);
-        lastSets.forEach((s) => {
-          const row = document.createElement("div");
-          row.className = "target-row";
-          const rirText = s.rir === null || s.rir === undefined ? "—" : s.rir;
-          row.textContent = `Set ${s.set_index}: ${s.weight} lb × ${s.reps} · RIR ${rirText}`;
-          lastCard.appendChild(row);
-        });
-        frag.appendChild(lastCard);
-      }
-
-      if (myToken !== introRenderToken) return; // superseded while awaiting above
-
-      frag.appendChild(setsPickerRow());
-
-      session.plan = Engine.prescribe(
-        ex, priorState, session.numSets, Engine.gymProfile(state.gymProfile),
-        session.spotterPresent === true, todayIso()
-      );
-      const planCard = document.createElement("div");
-      planCard.className = "card";
-      const planHeading = document.createElement("div");
-      planHeading.className = "card-heading";
-      planHeading.textContent = "Today's target";
-      planCard.appendChild(planHeading);
-      session.plan.forEach((p) => {
+    // What you actually did last time — separate from the fresh target below,
+    // so the two are never mistaken for each other. The target's RIR always
+    // ends the ramp at 0 on the last set regardless of what happened before;
+    // this is the only place that shows what you actually logged.
+    const lastSets = await getLastSessionSets(ex.id);
+    if (lastSets && lastSets.length) {
+      const lastCard = document.createElement("div");
+      lastCard.className = "card";
+      const lastHeading = document.createElement("div");
+      lastHeading.className = "card-heading";
+      lastHeading.textContent = `Last time (${lastSets[0].date})`;
+      lastCard.appendChild(lastHeading);
+      lastSets.forEach((s) => {
         const row = document.createElement("div");
         row.className = "target-row";
-        row.innerHTML = `Set ${p.set_index}: <strong>${p.target_weight} lb × ${p.target_reps}</strong> · RIR ${p.target_rir}` +
-          (p.capped ? ' <span class="badge-cap">capped</span>' : "");
-        planCard.appendChild(row);
+        const rirText = s.rir === null || s.rir === undefined ? "—" : s.rir;
+        row.textContent = `Set ${s.set_index}: ${s.weight} lb × ${s.reps} · RIR ${rirText}`;
+        lastCard.appendChild(row);
       });
-      frag.appendChild(planCard);
-    } else {
-      const note = document.createElement("div");
-      note.className = "card";
-      note.textContent = "First time logging this — no targets yet. Log what you do; next session's plan starts from this.";
-      frag.appendChild(note);
-      frag.appendChild(setsPickerRow());
-      session.plan = null;
+      frag.appendChild(lastCard);
     }
+
+    if (myToken !== introRenderToken) return; // superseded while awaiting above
+
+    frag.appendChild(setsPickerRow());
+
+    session.plan = Engine.prescribe(
+      ex, priorState, session.numSets, Engine.gymProfile(state.gymProfile),
+      session.spotterPresent === true, todayIso()
+    );
+    const planCard = document.createElement("div");
+    planCard.className = "card";
+    const planHeading = document.createElement("div");
+    planHeading.className = "card-heading";
+    planHeading.textContent = "Today's target";
+    planCard.appendChild(planHeading);
+    session.plan.forEach((p) => {
+      const row = document.createElement("div");
+      row.className = "target-row";
+      row.innerHTML = `Set ${p.set_index}: <strong>${p.target_weight} lb × ${p.target_reps}</strong> · RIR ${p.target_rir}` +
+        (p.capped ? ' <span class="badge-cap">capped</span>' : "");
+      planCard.appendChild(row);
+    });
+    frag.appendChild(planCard);
 
     if (spotterMatters(ex)) {
       const row = document.createElement("label");
@@ -392,6 +395,155 @@
     if (myToken !== introRenderToken) return; // superseded while awaiting above
     overlayBody.innerHTML = "";
     overlayBody.appendChild(frag);
+  }
+
+  // ---------------------------------------------------------------- calibration
+  // First-time exercise: no history, so there's nothing to read effort from.
+  // A short reactive ramp instead of one blind guess — see
+  // engine/progression.py's calibrate_step() for the full reasoning (Tier 3
+  // practitioner convention; what's evidence-grounded is reacting to proximity-
+  // to-failure at all, and treating an easy/hard self-report as a coarse
+  // direction rather than a precise number). displayRir here is UI-only, purely
+  // so the "Last time" card has something sensible to show later — it is never
+  // fed into calibrateStep() or any other decision.
+  const CALIBRATION_RATINGS = [
+    { value: Engine.CalibrationRating.VERY_EASY, label: "Very easy", displayRir: 4 },
+    { value: Engine.CalibrationRating.SLIGHTLY_EASY, label: "Slightly easy", displayRir: 2 },
+    { value: Engine.CalibrationRating.HIT_AT_LIMIT, label: "Barely hit it (0 left)", displayRir: 0 },
+    { value: Engine.CalibrationRating.SLIGHTLY_HARD, label: "Slightly too hard", displayRir: 0 },
+    { value: Engine.CalibrationRating.VERY_HARD, label: "Very hard", displayRir: 0 },
+  ];
+
+  function renderCalibrationIntro() {
+    const { ex } = session;
+    const target = Engine.calibrationTargetReps(ex);
+
+    if (ex.substitutes.length) overlaySwap.classList.remove("hidden");
+    overlayBody.innerHTML = "";
+
+    const card = document.createElement("div");
+    card.className = "card";
+    const heading = document.createElement("div");
+    heading.className = "card-heading";
+    heading.textContent = "First time — calibrating";
+    card.appendChild(heading);
+    const p = document.createElement("div");
+    p.className = "target-row";
+    p.textContent =
+      `No history yet. Aiming for ${target} reps (the middle of this exercise's ` +
+      `${ex.rep_range[0]}-${ex.rep_range[1]} range) — pick a weight you're fairly ` +
+      `confident about below, and you'll adjust set-to-set from there. ` +
+      `Up to ${Engine.CALIBRATION_MAX_SETS} sets.`;
+    card.appendChild(p);
+    overlayBody.appendChild(card);
+
+    const start = document.createElement("button");
+    start.className = "btn btn-primary btn-block";
+    start.textContent = "Start";
+    start.addEventListener("click", () => {
+      session.sets = [];
+      renderCalibrationSetEntry();
+    });
+    overlayBody.appendChild(start);
+  }
+
+  function renderCalibrationSetEntry() {
+    overlaySwap.classList.add("hidden");
+    const { ex } = session;
+    const target = Engine.calibrationTargetReps(ex);
+    const setNum = session.sets.length + 1;
+    const weightStep = ex.load_increment || 5;
+
+    overlayBody.innerHTML = "";
+    const card = document.createElement("div");
+    card.className = "card set-card";
+
+    const title = document.createElement("div");
+    title.className = "set-title";
+    title.textContent = `Set ${setNum} of up to ${Engine.CALIBRATION_MAX_SETS}`;
+    card.appendChild(title);
+
+    const tr = document.createElement("div");
+    tr.className = "target-row";
+    tr.textContent = `Aiming for ${target} reps`;
+    card.appendChild(tr);
+
+    const values = { weight: session.calibWeight, reps: target };
+    const group = document.createElement("div");
+    group.className = "stepper-group";
+    group.appendChild(makeStepper("Weight", values, "weight", weightStep, 0, null));
+    group.appendChild(makeStepper("Reps", values, "reps", 1, 0, null));
+    card.appendChild(group);
+    overlayBody.appendChild(card);
+
+    const ratingHeading = document.createElement("div");
+    ratingHeading.className = "card-heading";
+    ratingHeading.textContent = "How did it feel?";
+    overlayBody.appendChild(ratingHeading);
+
+    for (const rating of CALIBRATION_RATINGS) {
+      const btn = document.createElement("button");
+      btn.className = "btn btn-secondary btn-block";
+      btn.style.marginBottom = "10px";
+      btn.textContent = rating.label;
+      btn.addEventListener("click", () => logCalibrationSet(values.weight, values.reps, rating));
+      overlayBody.appendChild(btn);
+    }
+  }
+
+  function logCalibrationSet(weight, reps, rating) {
+    const { ex } = session;
+    const target = Engine.calibrationTargetReps(ex);
+    const setLog = Engine.setLog({
+      set_index: session.sets.length + 1,
+      weight, reps, rir: rating.displayRir,
+      target_weight: weight, target_reps: target, target_rir: 0,
+      stopped_at_cap: false,
+    });
+    session.sets.push(setLog);
+
+    const step = Engine.calibrateStep(ex, weight, rating.value, reps);
+    const budgetReached = session.sets.length >= Engine.CALIBRATION_MAX_SETS;
+
+    if (step.converged || budgetReached) {
+      finishCalibration(setLog);
+      return;
+    }
+
+    session.calibWeight = step.next_weight;
+    renderRestTimer(ex.default_rest_seconds, setLog, renderCalibrationSetEntry);
+  }
+
+  async function finishCalibration(justLogged) {
+    const { ex, sets } = session;
+    const today = todayIso();
+    const lastSet = sets[sets.length - 1];
+
+    const newState = Engine.bootstrap(ex, lastSet, today);
+    await Storage.saveState(newState);
+    await Storage.appendSetLogs(ex.id, today, sets);
+
+    overlayBody.innerHTML = "";
+    if (justLogged) overlayBody.appendChild(loggedConfirmRow(justLogged));
+
+    const card = document.createElement("div");
+    card.className = "card decision-card";
+    const msg = document.createElement("div");
+    msg.className = "decision-message";
+    msg.textContent = `Calibrated. Starting point for next time: ${newState.current_weight} lb × ${newState.current_rep_target}.`;
+    card.appendChild(msg);
+    overlayBody.appendChild(card);
+
+    const done = document.createElement("button");
+    done.className = "btn btn-primary btn-block";
+    done.style.marginTop = "16px";
+    done.textContent = "Done";
+    done.addEventListener("click", async () => {
+      closeOverlay();
+      await refreshLoggedToday();
+      renderExerciseList();
+    });
+    overlayBody.appendChild(done);
   }
 
   // ---------------------------------------------------------------- per-set logging
@@ -530,7 +682,8 @@
     return confirm;
   }
 
-  function renderRestTimer(seconds, justLogged) {
+  function renderRestTimer(seconds, justLogged, onDone) {
+    const next = onDone || renderSetEntry;
     overlayBody.innerHTML = "";
     if (justLogged) overlayBody.appendChild(loggedConfirmRow(justLogged));
 
@@ -563,7 +716,7 @@
       remaining -= 1;
       if (remaining <= 0) {
         clearInterval(interval);
-        renderSetEntry();
+        next();
         return;
       }
       tick();
@@ -571,12 +724,14 @@
 
     skip.addEventListener("click", () => {
       clearInterval(interval);
-      renderSetEntry();
+      next();
     });
   }
 
   // ---------------------------------------------------------------- finish
 
+  // Only ever called for a RETURNING exercise — first-time exercises finish
+  // through finishCalibration() instead. See openExerciseIntro().
   async function finishExercise(justLogged) {
     const { ex, priorState, sets } = session;
     const today = todayIso();
@@ -584,61 +739,47 @@
     overlayBody.innerHTML = "";
     if (justLogged) overlayBody.appendChild(loggedConfirmRow(justLogged));
 
-    if (!priorState) {
-      const newState = Engine.bootstrap(ex, sets[0], today);
-      await Storage.saveState(newState);
-      await Storage.appendSetLogs(ex.id, today, sets);
+    const dec = Engine.progress(ex, priorState, sets, today);
+    const newState = Engine.apply(priorState, dec, today);
+    await Storage.saveState(newState);
+    await Storage.appendSetLogs(ex.id, today, sets);
 
-      const card = document.createElement("div");
-      card.className = "card decision-card";
-      const msg = document.createElement("div");
-      msg.className = "decision-message";
-      msg.textContent = `Logged. Starting point for next time: ${newState.current_weight} lb × ${newState.current_rep_target}.`;
-      card.appendChild(msg);
-      overlayBody.appendChild(card);
-    } else {
-      const dec = Engine.progress(ex, priorState, sets, today);
-      const newState = Engine.apply(priorState, dec, today);
-      await Storage.saveState(newState);
-      await Storage.appendSetLogs(ex.id, today, sets);
+    const card = document.createElement("div");
+    card.className = "card decision-card";
 
-      const card = document.createElement("div");
-      card.className = "card decision-card";
+    const diag = document.createElement("div");
+    diag.className = "decision-diagnosis";
+    diag.textContent = dec.diagnosis.replace(/_/g, " ");
+    card.appendChild(diag);
 
-      const diag = document.createElement("div");
-      diag.className = "decision-diagnosis";
-      diag.textContent = dec.diagnosis.replace(/_/g, " ");
-      card.appendChild(diag);
+    const msg = document.createElement("div");
+    msg.className = "decision-message";
+    msg.textContent = dec.message;
+    card.appendChild(msg);
 
-      const msg = document.createElement("div");
-      msg.className = "decision-message";
-      msg.textContent = dec.message;
-      card.appendChild(msg);
+    for (const note of dec.notes) {
+      const n = document.createElement("div");
+      n.className = "decision-note";
+      n.textContent = note;
+      card.appendChild(n);
+    }
+    overlayBody.appendChild(card);
 
-      for (const note of dec.notes) {
-        const n = document.createElement("div");
-        n.className = "decision-note";
-        n.textContent = note;
-        card.appendChild(n);
+    if (dec.intervention_options.length) {
+      const optWrap = document.createElement("div");
+      optWrap.className = "intervention-options";
+      const heading = document.createElement("div");
+      heading.className = "target-row";
+      heading.textContent = "Pick an option — nothing applied automatically:";
+      optWrap.appendChild(heading);
+      for (const opt of dec.intervention_options) {
+        const btn = document.createElement("button");
+        btn.className = "btn btn-secondary";
+        btn.textContent = opt;
+        btn.addEventListener("click", () => btn.classList.add("btn-primary"));
+        optWrap.appendChild(btn);
       }
-      overlayBody.appendChild(card);
-
-      if (dec.intervention_options.length) {
-        const optWrap = document.createElement("div");
-        optWrap.className = "intervention-options";
-        const heading = document.createElement("div");
-        heading.className = "target-row";
-        heading.textContent = "Pick an option — nothing applied automatically:";
-        optWrap.appendChild(heading);
-        for (const opt of dec.intervention_options) {
-          const btn = document.createElement("button");
-          btn.className = "btn btn-secondary";
-          btn.textContent = opt;
-          btn.addEventListener("click", () => btn.classList.add("btn-primary"));
-          optWrap.appendChild(btn);
-        }
-        overlayBody.appendChild(optWrap);
-      }
+      overlayBody.appendChild(optWrap);
     }
 
     const done = document.createElement("button");

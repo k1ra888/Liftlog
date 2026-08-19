@@ -8,7 +8,7 @@
  * forever.
  */
 
-const CACHE_NAME = "liftlog-v4";
+const CACHE_NAME = "liftlog-v5";
 
 const APP_SHELL = [
   "./",

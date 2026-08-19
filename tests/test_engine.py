@@ -9,6 +9,8 @@ from datetime import date, timedelta
 import pytest
 
 from engine import (
+    CALIBRATION_MAX_SETS,
+    CalibrationRating,
     CapReason,
     Diagnosis,
     Equipment,
@@ -19,6 +21,9 @@ from engine import (
     Outcome,
     SetLog,
     apply,
+    bootstrap,
+    calibrate_step,
+    calibration_target_reps,
     classify,
     prescribe,
     progress,
@@ -571,3 +576,77 @@ def test_low_confidence_note_is_absent_when_load_is_added():
     d = progress(smith, state, logged(plan, [top] * 3, [4, 4, 4]), TODAY)
     assert d.diagnosis == Diagnosis.PROGRESS_LOAD
     assert not any("moving by reps" in n for n in d.notes)
+
+
+# ------------------------------------------------------- calibration (first-time)
+
+
+def test_calibration_target_is_the_middle_of_the_rep_range():
+    assert calibration_target_reps(PULLDOWN) == 12   # (10+15)/2 = 12.5 -> 12
+    assert calibration_target_reps(BENCH) == 6        # (5+8)/2 = 6.5 -> 6
+    assert calibration_target_reps(PULLUP) == 8        # (5+10)/2 = 7.5 -> 8
+
+
+def test_very_easy_adds_two_increments():
+    step = calibrate_step(PULLDOWN, 60.0, CalibrationRating.VERY_EASY, actual_reps=18)
+    assert step.next_weight == 70.0 and step.converged is False
+
+
+def test_slightly_easy_adds_one_increment():
+    step = calibrate_step(PULLDOWN, 60.0, CalibrationRating.SLIGHTLY_EASY, actual_reps=13)
+    assert step.next_weight == 65.0 and step.converged is False
+
+
+def test_hit_at_limit_converges_and_holds_weight():
+    step = calibrate_step(PULLDOWN, 60.0, CalibrationRating.HIT_AT_LIMIT, actual_reps=12)
+    assert step.next_weight == 60.0 and step.converged is True
+
+
+def test_hard_ratings_scale_the_drop_by_actual_deviation_not_just_the_button():
+    """1-2 reps short -> 1 increment down; a bigger miss -> more, capped."""
+    small_miss = calibrate_step(PULLDOWN, 60.0, CalibrationRating.SLIGHTLY_HARD, actual_reps=10)
+    assert small_miss.next_weight == 55.0   # 12 - 10 = 2 short -> ceil(2/2)=1 step
+
+    big_miss = calibrate_step(PULLDOWN, 60.0, CalibrationRating.VERY_HARD, actual_reps=2)
+    assert big_miss.next_weight == 45.0     # 12 - 2 = 10 short -> ceil(10/2)=5, capped at 3
+
+
+def test_weighted_exercise_never_drops_below_one_increment():
+    step = calibrate_step(PULLDOWN, 10.0, CalibrationRating.VERY_HARD, actual_reps=0)
+    assert step.next_weight == 5.0   # would go to -5 uncapped; floors at one increment
+
+
+def test_bodyweight_floors_at_zero_not_one_increment():
+    step = calibrate_step(PULLUP, 0.0, CalibrationRating.VERY_HARD, actual_reps=0)
+    assert step.next_weight == 0.0   # pure bodyweight is a valid floor, unlike weighted gear
+
+
+def test_calibration_converges_within_the_max_set_budget():
+    """A short reactive ramp, not an open-ended search — must settle inside
+    CALIBRATION_MAX_SETS for a reasonably-picked starting guess."""
+    weight = 40.0   # first guess, too light
+    ratings_and_reps = [
+        (CalibrationRating.VERY_EASY, 18),
+        (CalibrationRating.SLIGHTLY_EASY, 13),
+        (CalibrationRating.SLIGHTLY_HARD, 11),
+        (CalibrationRating.HIT_AT_LIMIT, 12),
+    ]
+    converged = False
+    for i, (rating, reps) in enumerate(ratings_and_reps):
+        assert i < CALIBRATION_MAX_SETS
+        step = calibrate_step(PULLDOWN, weight, rating, reps)
+        weight = step.next_weight
+        if step.converged:
+            converged = True
+            break
+    assert converged
+    assert weight == 50.0
+
+
+def test_calibration_feeds_bootstrap_with_the_last_completed_set_not_the_first():
+    """Whatever the final calibration set actually was — not set 1's opening
+    guess — becomes next session's starting point."""
+    last_set = SetLog(set_index=3, weight=50.0, reps=12, target_weight=0, target_reps=0, target_rir=0)
+    state = bootstrap(PULLDOWN, last_set, TODAY)
+    assert state.current_weight == 50.0
+    assert state.current_rep_target == 12
